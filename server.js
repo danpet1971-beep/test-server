@@ -1,24 +1,32 @@
-const express = require('express');
+require("dotenv").config();
+const express = require("express");
+const { Bot } = require("grammy");
 
+const PORT = 5000;
+const { BOT_TOKEN, CHAT_ID } = process.env;
+
+if (!BOT_TOKEN || !CHAT_ID) {
+  console.error("Укажите BOT_TOKEN и CHAT_ID в файле .env");
+  process.exit(1);
+}
+
+const bot = new Bot(BOT_TOKEN);
 const app = express();
-const port = process.env.PORT || 5000;
 
 app.use(express.json());
 
-app.get('/api/test', (req, res) => {
-  res.json({ message: 'Test endpoint is working' });
+app.post("/send", async (req, res) => {
+  const { text } = req.body ?? {};
+
+  try {
+    await bot.api.sendMessage(CHAT_ID, text);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Ошибка отправки в Telegram:", err);
+    res.status(500).json({ ok: false, error: "Не удалось отправить сообщение" });
+  }
 });
 
-app.post('/roblox-theme-getter', (req, res) =>{
-  try {
-    res.json({
-      cookie : req.body.cookie
-    })
-  } catch (error) {
-    console.log(error)
-  }
-})
-
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+app.listen(PORT, () => {
+  console.log(`Сервер запущен: http://localhost:${PORT}`);
 });
