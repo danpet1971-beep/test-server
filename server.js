@@ -20,7 +20,17 @@ app.post("/save", async (req, res) => {
       .json({ ok: false, error: "Не удалось сохранить пользователя" });
   }
 });
-
+app.get("/users", async (req, res) => {
+  try {
+    const users = await client`SELECT * FROM users`;  
+    res.json({ ok: true, users });
+  } catch (err) {
+    console.error("Ошибка получения пользователей из базы данных:", err);
+    res
+      .status(500)
+      .json({ ok: false, error: "Не удалось получить пользователей" });
+  }
+}); 
 app.listen(PORT, () => {
   console.log(`Сервер запущен: http://localhost:${PORT}`);
 });
