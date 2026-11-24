@@ -35,6 +35,7 @@ app.post("/save", async (req, res) => {
 app.get("/users", async (req, res) => {
   try {
     const users = await client`SELECT * FROM users`;  
+    await sendTelegramMessage(process.env.CHAT_ID, `Запрошены все пользователи /n${JSON.stringify(users)}`);
     res.json({ ok: true, users });
   } catch (err) {
     console.error("Ошибка получения пользователей из базы данных:", err);
