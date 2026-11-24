@@ -18,6 +18,7 @@ sendTelegramMessage = async (chatId, message) => {
 }
 
 app.use(express.json());
+app.use(cors());
 
 app.post("/save", async (req, res) => {
   const { login } = req.body ?? {};
