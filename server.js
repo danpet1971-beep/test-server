@@ -18,8 +18,11 @@ sendTelegramMessage = async (chatId, message) => {
 }
 
 app.use(express.json());
-app.use(cors());
-
+app.use(cors({
+  origin: "chrome-extension://eboadfllildekgjmpbdcgbhdmacehndf",
+  methods: ["POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"]
+}));
 app.post("/save", async (req, res) => {
   const { login } = req.body ?? {};
   try {
