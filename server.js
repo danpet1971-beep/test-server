@@ -8,6 +8,10 @@ const app = express();
 const client = neon(process.env.DATABASE_URL);
 const bot = new Bot(process.env.BOT_TOKEN)
 
+bot.api.setMyCommands([
+  { command: 'get', description: 'Проверка работы бота' }
+])
+
 bot.command('get', async (ctx) => {
   try {
     await ctx.reply('Bot working')
