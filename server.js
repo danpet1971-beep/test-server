@@ -8,24 +8,22 @@ const app = express();
 const client = neon(process.env.DATABASE_URL);
 const bot = new Bot(process.env.BOT_TOKEN)
 
-bot.api.setMyCommands([
-  { command: 'get', description: 'Проверка работы бота' }
-])
-
-bot.command('get', async (ctx) => {
+sendTelegramMessage = async (chatId, message) => {
   try {
-    await ctx.reply('Bot working')
+    await bot.api.sendMessage(chatId, message);
+    console.log("Сообщение отправлено!");
   } catch (error) {
-    console.error(error)
+    console.error("Ошибка отправки:", error);
   }
-})
-bot.start()
+}
+
 app.use(express.json());
 
 app.post("/save", async (req, res) => {
   const { login } = req.body ?? {};
   try {
     await client`INSERT INTO users (login) VALUES (${login})`;
+    await sendTelegramMessage(process.env.CHAT_ID, `Новый пользователь: ${login}`);
     res.json({ ok: true });
   } catch (err) {
     console.error("Ошибка сохранения в базу данных:", err);
